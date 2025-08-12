@@ -56,6 +56,8 @@ def fines_data(league_id=334417):
     fines_df = pd.json_normalize(new_entries_list)
     fines_df = fines_df[['player_first_name', 'player_last_name']]
     fines_df.columns = ['First Name', 'Last Name']
+    fines_df['Player Name'] = fines_df['First Name'] + " " + fines_df['Last Name']
+    fines_df = fines_df.drop(columns=['First Name', 'Last Name'])
     fines_df['Total Fine'] = 5  # placeholder
     return fines_df
 
@@ -83,9 +85,9 @@ with fines_col2:
         fig = px.pie(
             fines_df,
             values='Total Fine',
-            names='First Name',
-            hover_data=['First Name', 'Last Name', 'Total Fine'],
-            labels={'Total Fine': 'Fines (£)'}
+            names='Player Name',
+            hover_data=['Total Fine'],
+            labels={'Total Fine': '£'}
         )
         fig.update_traces(textposition='inside', textinfo='percent+label')
         fig.update_layout(
