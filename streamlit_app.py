@@ -52,11 +52,26 @@ def users_data(league_id=334417):
 def gw_data():
     url = "https://fantasy.premierleague.com/api/bootstrap-static/"
     r = requests.get(url).json()
+    
+    # Gameweek data
     events_list = r.get('events', [])
     gw_df = pd.DataFrame(events_list)[['id', 'name', 'deadline_time', 'finished', 'average_entry_score']]
     gw_df.columns = ['GW ID', 'GW Name', 'Deadline', 'Finished', 'Average Points']
+    
+    # Phase data
+    phases_list = r.get('phases', [])
+    phases_df = pd.DataFrame(phases_list)[['id', 'name', 'start_event', 'stop_event']]
+    phases_df.columns = ['Phase ID', 'Phase Name', 'Start GW', 'End GW']
+    
+    # Map each GW to its phase
+    phase_lookup = {}
+    for _, row in phases_df.iterrows():
+        for gw in range(row['Start GW'], row['End GW'] + 1):
+            phase_lookup[gw] = row['Phase Name']
+    
+    gw_df['Phase Name'] = gw_df['GW ID'].map(phase_lookup)
+    
     return gw_df
-
 
 
 # Sidebar menu
@@ -104,12 +119,13 @@ elif selected == "GW Data":
     fines_df = fines_data()
 
     st.subheader(f"League Table - GameWeek {gw_option}")
-    st.dataframe(ml_df, use_container_width=True)
+    st.dataframe(ml_df, use_container_width=True, hide_index=True)
     st.markdown("---")
-    gw_df = gw_data()
+
+    gwm2_df = gw_data()
 
     st.subheader(f"GameWeek")
-    st.dataframe(gw_df, use_container_width=True)
+    st.dataframe(gwm2_df, use_container_width=True, hide_index=True)
     st.markdown("---")
 
      # ---- Get and display GW vs Player chart ----
@@ -133,7 +149,7 @@ elif selected == "Fines":
     fines_col1, fines_col2 = st.columns([0.5, 0.5])
     with fines_col1:
         st.subheader("Fines Overview")
-        st.dataframe(fines_df, use_container_width=True)
+        st.dataframe(fines_df, use_container_width=True, hide_index=True)
 
     with fines_col2:
         st.subheader("Fines Distribution")
