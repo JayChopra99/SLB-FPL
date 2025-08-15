@@ -38,7 +38,7 @@ gw_option = st.selectbox(
 )
 
 # ---- Data Functions ----
-@st.cache_data
+@st.cache_data(ttl=60)
 def get_ml_data(league_id=334417, page_id=1, phase=1):
     url = f"https://fantasy.premierleague.com/api/leagues-classic/{league_id}/standings/?page_standings={page_id}&phase={phase}"
     r = requests.get(url).json()
@@ -48,7 +48,7 @@ def get_ml_data(league_id=334417, page_id=1, phase=1):
     players_df.columns = ['Team Name', 'First Name', 'Last Name']
     return players_df
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def fines_data(league_id=334417):
     url = f"https://fantasy.premierleague.com/api/leagues-classic/{league_id}/standings/"
     r = requests.get(url).json()
