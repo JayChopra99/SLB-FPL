@@ -10,6 +10,10 @@ st.set_page_config(
     layout="wide"
 )
 
+
+tab1, tab2, tab3 = st.tabs(["Cat", "Dog", "Owl"])
+
+
 # ---- Header Layout ----
 header_col1, header_col2 = st.columns([0.15, 0.85])
 with header_col1:
