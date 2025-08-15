@@ -35,15 +35,39 @@ def fines_data(league_id=334417):
     fines_df['Total Fine'] = 5  # placeholder
     return fines_df
 
+@st.cache_data(ttl=60)
+def users_data(league_id=334417):
+    url = f"https://fantasy.premierleague.com/api/leagues-classic/{league_id}/standings/"
+    r = requests.get(url).json()
+    new_entries_list = r.get('new_entries', {}).get('results', [])
+    users_df = pd.json_normalize(new_entries_list)
+    users_df = users_df[['player_first_name', 'player_last_name']]
+    users_df.columns = ['First Name', 'Last Name']
+    users_df['Player Name'] = users_df['First Name'] + " " + users_df['Last Name']
+    users_df = users_df.drop(columns=['First Name', 'Last Name'])
+    return users_df
+
+@st.cache_data(ttl=60)
+def gw_data():
+    url = "https://fantasy.premierleague.com/api/bootstrap-static/"
+    r = requests.get(url).json()
+    events_list = r.get('events', [])
+    gw_df = pd.DataFrame(events_list)[['id', 'name', 'deadline_time', 'finished', 'average_entry_score']]
+    gw_df.columns = ['GW ID', 'GW Name', 'Deadline', 'Finished', 'Average Points']
+    return gw_df
+
 
 
 # Sidebar menu
 with st.sidebar:
     selected = option_menu(
-        menu_title="Menu",
+        menu_title="",
         options=["Home", "GW Data", "Fines"],
+        icons= ["house-door-fill","database","currency-dollar"],
+        menu_icon= [""],
         default_index=0
     )
+    
 
 # ---- Main Page Layout ----
 if selected == "Home":
@@ -63,6 +87,10 @@ if selected == "Home":
         )
     st.markdown("---")
 
+ 
+  
+
+
 elif selected == "GW Data":
     gw_option = st.selectbox(
         "Select GameWeek:",
@@ -77,6 +105,26 @@ elif selected == "GW Data":
     st.subheader(f"League Table - GameWeek {gw_option}")
     st.dataframe(ml_df, use_container_width=True)
     st.markdown("---")
+    gw_df = gw_data()
+
+    st.subheader(f"GameWeek")
+    st.dataframe(gw_df, use_container_width=True)
+    st.markdown("---")
+
+     # ---- Get and display GW vs Player chart ----
+    users_df = users_data()
+    fig = px.scatter(
+        users_df,
+        x="Total Fine",
+        y="Player Name",
+        size="Total Fine",
+        color="Total Fine",
+        title="GameWeek Performance by Player",
+        labels={"GW Points": "Points"},
+        hover_name="Player Name"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
 
 elif selected == "Fines":
     fines_df = fines_data()
