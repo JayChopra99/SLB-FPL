@@ -45,6 +45,7 @@ def users_data(league_id=334417):
     users_df.columns = ['First Name', 'Last Name']
     users_df['Player Name'] = users_df['First Name'] + " " + users_df['Last Name']
     users_df = users_df.drop(columns=['First Name', 'Last Name'])
+    users_df['Total Fine'] = 5  # placeholder
     return users_df
 
 @st.cache_data(ttl=60)
@@ -71,7 +72,7 @@ with st.sidebar:
 
 # ---- Main Page Layout ----
 if selected == "Home":
-    header_col1, header_col2 = st.columns([0.15, 0.85])
+    header_col1, header_col2 = st.columns([0.1, 0.85])
     with header_col1:
         st.image(
             "https://upload.wikimedia.org/wikipedia/commons/d/d6/SLB_Logo_2022.svg",
