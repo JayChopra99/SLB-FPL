@@ -3,6 +3,7 @@ from streamlit_option_menu import option_menu
 import pandas as pd
 import requests
 import plotly.express as px
+import numpy as np
 
 # ---- Page Config ----
 st.set_page_config(
@@ -70,6 +71,33 @@ def fines_data(league_id=334417, page_id=1):
         return df
     else:
         return pd.DataFrame(columns=['Team Name', 'Manager Name', 'Total Fine'])
+@st.cache_data(ttl=60)    
+def gw_data():
+    url = "https://fantasy.premierleague.com/api/bootstrap-static/"
+    r = requests.get(url).json()
+    
+    # Gameweek data
+    events_list = r.get('events', [])
+    gw_df = pd.DataFrame(events_list)[['id', 'name', 'deadline_time', 'finished', 'average_entry_score']]
+    gw_df.columns = ['GW ID', 'GW Name', 'Deadline', 'Finished', 'Average Points']
+    
+    # Phase data
+    phases_list = r.get('phases', [])
+    phases_df = pd.DataFrame(phases_list)[['id', 'name', 'start_event', 'stop_event']]
+    phases_df.columns = ['Phase ID', 'Phase Name', 'Start GW', 'End GW']
+    
+    # Map each GW to its phase
+    phase_lookup = {}
+    for _, row in phases_df.iterrows():
+        for gw in range(row['Start GW'], row['End GW'] + 1):
+            phase_lookup[gw] = row['Phase Name']
+    gw_df['Phase Name'] = gw_df['GW ID'].map(phase_lookup)
+    
+    # Convert deadline to datetime & extract month
+    gw_df['Deadline'] = pd.to_datetime(gw_df['Deadline'])
+    gw_df['Month'] = gw_df['Deadline'].dt.to_period('M')  # e.g., 2025-08
+    
+    return gw_df
 
 # ---- Sidebar menu ----
 with st.sidebar:
@@ -174,9 +202,9 @@ elif selected == "GW Data":
         for gw in gw_cols:
             rank_df[gw] = (
                 rank_df[gw]
-                .rank(ascending=False, method='min')  # get ranks
-                .astype('Int64')  # convert to integer with NA support
-    )
+                .rank(ascending=False, method='min')
+                .astype('Int64')
+            )
 
         # --- Precompute min/max per GW for faster styling ---
         points_max = gw_points_df[gw_cols].max()
@@ -205,26 +233,92 @@ elif selected == "GW Data":
             else:
                 return ''
 
-        # --- Apply styling ---
-        styled_points_df = gw_points_df.style.apply(
-            lambda row: [''] + [highlight_points(row[gw], gw) for gw in gw_cols], axis=1
-        )
+        # --- Create Tabs ---
+        weekly_tab, monthly_tab = st.tabs(["Weekly", "Monthly"])
 
-        styled_rank_df = rank_df.style.apply(
-            lambda row: [''] + [highlight_rank(row[gw], gw) for gw in gw_cols], axis=1
-        )
+        # --- Weekly Tab ---
+        with weekly_tab:
+            st.subheader("GW Points per Manager")
+            styled_points_df = gw_points_df.style.apply(
+                lambda row: [''] + [highlight_points(row[gw], gw) for gw in gw_cols], axis=1
+            )
+            st.dataframe(styled_points_df, use_container_width=True, hide_index=True)
 
-        # --- Display tables ---
-        st.subheader("GW Points per Manager")
-        st.dataframe(styled_points_df, use_container_width=True, hide_index=True)
+            st.markdown("---")
 
-        st.markdown("---")
+            st.subheader("GW Rank per Manager")
+            styled_rank_df = rank_df.style.apply(
+                lambda row: [''] + [highlight_rank(row[gw], gw) for gw in gw_cols], axis=1
+            )
+            st.dataframe(styled_rank_df, use_container_width=True, hide_index=True)
 
-        st.subheader("GW Rank per Manager")
-        st.dataframe(styled_rank_df, use_container_width=True, hide_index=True)
+        # --- Monthly Tab ---
+        with monthly_tab:
+            gw_df = gw_data()  # get GW metadata including Month
 
+            # Convert GW points DF from wide to long
+            points_long = gw_points_df.melt(
+                id_vars=['Manager Name'],
+                value_vars=gw_cols,
+                var_name='GW',
+                value_name='GW Points'
+            )
+            points_long['GW'] = points_long['GW'].astype(int)
+
+            # Merge with GW metadata to get Month
+            points_long = points_long.merge(
+                gw_df[['GW ID','Month']],
+                left_on='GW',
+                right_on='GW ID',
+                how='left'
+            )
+
+            # Convert Period to month abbreviation (e.g., Aug, Sep)
+            points_long['Month'] = points_long['Month'].dt.strftime('%b')
+
+            # Group by Manager and Month, sum points and convert to integer
+            monthly_points = points_long.groupby(['Manager Name','Month'])['GW Points'].sum().reset_index()
+            monthly_points['GW Points'] = monthly_points['GW Points'].astype('Int64')
+
+            # Pivot to have months as columns, keep missing months as NaN
+            monthly_points_pivot = monthly_points.pivot(
+                index='Manager Name', 
+                columns='Month', 
+                values='GW Points'
+            )
+
+            # Sort months in calendar order, missing months remain NaN
+            calendar_order = ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May']
+            monthly_points_pivot = monthly_points_pivot.reindex(columns=calendar_order)
+            monthly_points_pivot = monthly_points_pivot.replace(0, np.nan)
+
+            # --- Precompute min/max per Month, ignoring NaNs ---
+            month_max = monthly_points_pivot.max(skipna=True)
+            month_min = monthly_points_pivot.min(skipna=True)
+
+            # Highlighting function for monthly points
+            def highlight_monthly(val, col_max, col_min):
+                if pd.isna(val):
+                    return ''
+                elif val == col_max:
+                    return 'background-color: lightgreen; font-weight: bold'
+                elif val == col_min:
+                    return 'background-color: salmon'
+                else:
+                    return ''
+
+            # Apply styling
+            styled_monthly_df = monthly_points_pivot.style.apply(
+                lambda row: [highlight_monthly(row[col], month_max[col], month_min[col]) for col in monthly_points_pivot.columns],
+                axis=1
+            )
+
+            st.subheader("Monthly Points per Manager")
+            st.dataframe(styled_monthly_df, use_container_width=True)
     else:
         st.warning("No GW points data available yet.")
+
+
 
 elif selected == "Fines":
     fines_df = fines_data()
