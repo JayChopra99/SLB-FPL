@@ -139,7 +139,7 @@ if selected == "Home":
         gw_cols = list(range(1, total_gws + 1))
         gw_points_df[gw_cols] = gw_points_df[gw_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
 
-        # Rank per GW
+        # Compute rank per GW
         rank_df = gw_points_df.copy()
         for gw in gw_cols:
             rank_df[gw] = (
@@ -149,18 +149,21 @@ if selected == "Home":
                 .astype("Int64")
             )
 
+        # Add GW 0 as starting point with rank 0
+        rank_df.insert(1, 0, 0)  # insert GW0 after Manager Name
+
         # Reshape to long format
         rank_long = rank_df.melt(
             id_vars=["Manager Name"],
-            value_vars=gw_cols,
+            value_vars=[0] + gw_cols,  # include GW0
             var_name="Gameweek",
             value_name="Rank"
-        ).dropna()
+        )
 
         # Ensure Gameweek is integer
         rank_long["Gameweek"] = rank_long["Gameweek"].astype(int)
 
-        # Line chart
+        # Plot line chart
         fig = px.line(
             rank_long,
             x="Gameweek",
@@ -170,12 +173,11 @@ if selected == "Home":
             title="Rank Progression Over Gameweeks"
         )
 
-        fig.update_yaxes(autorange="reversed")  # Rank 1 at top
-        fig.update_xaxes(
-            tickmode="linear",
-            dtick=1,
-            range=[1, total_gws]
-        )
+        # Reverse y-axis so rank 1 is on top
+        fig.update_yaxes(autorange=False, range=[0, rank_long["Rank"].max()])
+
+        # Start x-axis from 0
+        fig.update_xaxes(tickmode="linear", dtick=1, range=[0, rank_long["Gameweek"].max()])
 
         st.plotly_chart(fig, use_container_width=True)
 
