@@ -254,73 +254,107 @@ elif selected == "GW Data":
             )
             st.dataframe(styled_rank_df, use_container_width=True, hide_index=True)
 
-        # --- Monthly Tab ---
-        with monthly_tab:
-            gw_df = gw_data()  # get GW metadata including Month
+            # --- Monthly Tab ---
+            with monthly_tab:
+                gw_df = gw_data()  # get GW metadata including Month
 
-            # Convert GW points DF from wide to long
-            points_long = gw_points_df.melt(
-                id_vars=['Manager Name'],
-                value_vars=gw_cols,
-                var_name='GW',
-                value_name='GW Points'
-            )
-            points_long['GW'] = points_long['GW'].astype(int)
+                # Convert GW points DF from wide to long
+                points_long = gw_points_df.melt(
+                    id_vars=['Manager Name'],
+                    value_vars=gw_cols,
+                    var_name='GW',
+                    value_name='GW Points'
+                )
+                points_long['GW'] = points_long['GW'].astype(int)
 
-            # Merge with GW metadata to get Month
-            points_long = points_long.merge(
-                gw_df[['GW ID','Month']],
-                left_on='GW',
-                right_on='GW ID',
-                how='left'
-            )
+                # Merge with GW metadata to get Month
+                points_long = points_long.merge(
+                    gw_df[['GW ID','Month']],
+                    left_on='GW',
+                    right_on='GW ID',
+                    how='left'
+                )
 
-            # Convert Period to month abbreviation (e.g., Aug, Sep)
-            points_long['Month'] = points_long['Month'].dt.strftime('%b')
+                # Convert Period to month abbreviation (e.g., Aug, Sep)
+                points_long['Month'] = points_long['Month'].dt.strftime('%b')
 
-            # Group by Manager and Month, sum points and convert to integer
-            monthly_points = points_long.groupby(['Manager Name','Month'])['GW Points'].sum().reset_index()
-            monthly_points['GW Points'] = monthly_points['GW Points'].astype('Int64')
+                # --- Monthly Points ---
+                monthly_points = points_long.groupby(['Manager Name','Month'])['GW Points'].sum().reset_index()
+                monthly_points['GW Points'] = monthly_points['GW Points'].astype('Int64')
 
-            # Pivot to have months as columns, keep missing months as NaN
-            monthly_points_pivot = monthly_points.pivot(
-                index='Manager Name', 
-                columns='Month', 
-                values='GW Points'
-            )
+                # Pivot points table
+                monthly_points_pivot = monthly_points.pivot(
+                    index='Manager Name', 
+                    columns='Month', 
+                    values='GW Points'
+                )
 
-            # Sort months in calendar order, missing months remain NaN
-            calendar_order = ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May']
-            monthly_points_pivot = monthly_points_pivot.reindex(columns=calendar_order)
-            monthly_points_pivot = monthly_points_pivot.replace(0, np.nan)
+                calendar_order = ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May']
+                monthly_points_pivot = monthly_points_pivot.reindex(columns=calendar_order)
+                monthly_points_pivot = monthly_points_pivot.replace(0, np.nan)
 
-            # --- Precompute min/max per Month, ignoring NaNs ---
-            month_max = monthly_points_pivot.max(skipna=True)
-            month_min = monthly_points_pivot.min(skipna=True)
+                # --- Precompute min/max per Month for points ---
+                month_max = monthly_points_pivot.max(skipna=True)
+                month_min = monthly_points_pivot.min(skipna=True)
 
-            # Highlighting function for monthly points
-            def highlight_monthly(val, col_max, col_min):
-                if pd.isna(val):
-                    return ''
-                elif val == col_max:
-                    return 'background-color: lightgreen; font-weight: bold'
-                elif val == col_min:
-                    return 'background-color: salmon'
-                else:
-                    return ''
+                def highlight_monthly_points(val, col_max, col_min):
+                    if pd.isna(val):
+                        return ''
+                    elif val == col_max:
+                        return 'background-color: lightgreen; font-weight: bold'
+                    elif val == col_min:
+                        return 'background-color: salmon'
+                    else:
+                        return ''
 
-            # Apply styling
-            styled_monthly_df = monthly_points_pivot.style.apply(
-                lambda row: [highlight_monthly(row[col], month_max[col], month_min[col]) for col in monthly_points_pivot.columns],
-                axis=1
-            )
+                styled_monthly_points = monthly_points_pivot.style.apply(
+                    lambda row: [highlight_monthly_points(row[col], month_max[col], month_min[col]) 
+                                for col in monthly_points_pivot.columns],
+                    axis=1
+                )
 
-            st.subheader("Monthly Points per Manager")
-            st.dataframe(styled_monthly_df, use_container_width=True)
+                st.subheader("Monthly Points per Manager")
+                st.dataframe(styled_monthly_points, use_container_width=True)
+
+                # --- Monthly Rank ---
+                monthly_rank_pivot = monthly_points_pivot.copy()
+
+                # Rank managers per month, ignoring 0/NaN
+                for col in monthly_rank_pivot.columns:
+                    if monthly_rank_pivot[col].notna().any():  # Only rank if at least one manager has points
+                        monthly_rank_pivot[col] = monthly_rank_pivot[col].rank(
+                            ascending=False, method="min"
+                        )
+                    else:
+                        monthly_rank_pivot[col] = np.nan  # leave entire column blank if no points
+
+                # Keep NaN as blank
+                monthly_rank_pivot = monthly_rank_pivot.astype("Int64")
+
+                # Precompute min/max for rank (ignoring NaNs)
+                rank_max = monthly_rank_pivot.max(skipna=True)
+                rank_min = monthly_rank_pivot.min(skipna=True)
+
+                def highlight_monthly_rank(val, col_max, col_min):
+                    if pd.isna(val):   # no points → no rank
+                        return ''
+                    elif val == col_min:  # best rank
+                        return 'background-color: lightgreen; font-weight: bold'
+                    elif val == col_max:  # worst rank
+                        return 'background-color: salmon'
+                    else:
+                        return ''
+
+                styled_monthly_rank = monthly_rank_pivot.style.apply(
+                    lambda row: [highlight_monthly_rank(row[col], rank_max[col], rank_min[col]) 
+                                for col in monthly_rank_pivot.columns],
+                    axis=1
+                )
+
+                st.subheader("Monthly Rank per Manager")
+                st.dataframe(styled_monthly_rank, use_container_width=True)
     else:
         st.warning("No GW points data available yet.")
-
-
 
 elif selected == "Fines":
     fines_df = fines_data()
