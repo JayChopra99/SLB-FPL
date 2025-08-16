@@ -98,6 +98,59 @@ if selected == "Home":
         )
     st.markdown("---")
 
+    # --- Line chart for rank progression ---
+    total_gws = 38
+    gw_points_df = get_all_gw_points(total_gws=total_gws)
+
+    if not gw_points_df.empty:
+        # Ensure all 38 GWs exist
+        for gw in range(1, total_gws + 1):
+            if gw not in gw_points_df.columns:
+                gw_points_df[gw] = 0
+
+        gw_cols = list(range(1, total_gws + 1))
+        gw_points_df[gw_cols] = gw_points_df[gw_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
+
+        # Rank per GW
+        rank_df = gw_points_df.copy()
+        for gw in gw_cols:
+            rank_df[gw] = (
+                rank_df[gw]
+                .replace(0, pd.NA)
+                .rank(ascending=False, method='min')
+                .astype("Int64")
+            )
+
+        # Reshape to long format
+        rank_long = rank_df.melt(
+            id_vars=["Manager Name"],
+            value_vars=gw_cols,
+            var_name="Gameweek",
+            value_name="Rank"
+        ).dropna()
+
+        # Ensure Gameweek is integer
+        rank_long["Gameweek"] = rank_long["Gameweek"].astype(int)
+
+        # Line chart
+        fig = px.line(
+            rank_long,
+            x="Gameweek",
+            y="Rank",
+            color="Manager Name",
+            markers=True,
+            title="Rank Progression Over Gameweeks"
+        )
+
+        fig.update_yaxes(autorange="reversed")  # Rank 1 at top
+        fig.update_xaxes(
+            tickmode="linear",
+            dtick=1,
+            range=[1, total_gws]
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
 elif selected == "GW Data":
     total_gws = 38
     gw_points_df = get_all_gw_points(total_gws=total_gws)
