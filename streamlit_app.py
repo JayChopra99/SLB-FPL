@@ -103,19 +103,78 @@ elif selected == "GW Data":
     gw_points_df = get_all_gw_points(total_gws=total_gws)
 
     if not gw_points_df.empty:
-        gw_option = st.selectbox(
-            "Select GameWeek:",
-            list(range(1, total_gws+1)),
-            index=0,
-            format_func=lambda x: f"GameWeek {x}"
+        # Ensure all 38 GWs exist as columns
+        for gw in range(1, total_gws + 1):
+            if gw not in gw_points_df.columns:
+                gw_points_df[gw] = 0
+
+        # Convert GW columns to numeric
+        gw_cols = list(range(1, total_gws + 1))
+        gw_points_df[gw_cols] = gw_points_df[gw_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
+
+        # Sort columns by GW number
+        gw_points_df = gw_points_df[['Manager Name'] + gw_cols]
+
+        # Replace 0 points with blank for display
+        display_points_df = gw_points_df.replace(0, "")
+
+        # Rank per GW (only rank non-blank points)
+        rank_df = gw_points_df.copy()
+        for gw in gw_cols:
+            rank_df[gw] = (
+                rank_df[gw]
+                .replace(0, pd.NA)
+                .rank(ascending=False, method='min')
+                .astype("Int64")   # keep as integer with NA support
+            )
+
+        display_rank_df = rank_df  # already integers with NA
+
+        # --- Highlighting functions ---
+        def highlight_points(val, col):
+            try:
+                val = float(val)
+            except:
+                return ''
+            max_val = gw_points_df[col].max()
+            min_val = gw_points_df[col].min()
+            if val == max_val:
+                return 'background-color: lightgreen; font-weight: bold'
+            elif val == min_val or val == 0:
+                return 'background-color: salmon'
+            else:
+                return ''
+
+        def highlight_rank(val, col):
+            if pd.isna(val):
+                return ''
+            min_val = rank_df[col].min()
+            max_val = rank_df[col].max()
+            if val == min_val:
+                return 'background-color: lightgreen; font-weight: bold'
+            elif val == max_val:
+                return 'background-color: salmon'
+            else:
+                return ''
+
+        # Apply styles, leave 'Manager Name' column unstyled
+        styled_points_df = display_points_df.style.apply(
+            lambda row: [''] + [highlight_points(row[gw], gw) for gw in gw_cols], axis=1
         )
 
-        # Filter columns up to selected GW
-        cols_to_show = ['Manager Name'] + [col for col in gw_points_df.columns if isinstance(col, int) and col <= gw_option]
-        filtered_df = gw_points_df[cols_to_show]
+        styled_rank_df = display_rank_df.style.apply(
+            lambda row: [''] + [highlight_rank(row[gw], gw) for gw in gw_cols], axis=1
+        )
 
-        st.subheader(f"GW Points per Manager up to GameWeek {gw_option}")
-        st.dataframe(filtered_df, use_container_width=True, hide_index=True)
+        # Display tables with styling
+        st.subheader("GW Points per Manager")
+        st.dataframe(styled_points_df, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+
+        st.subheader("GW Rank per Manager")
+        st.dataframe(styled_rank_df, use_container_width=True, hide_index=True)
+        
     else:
         st.warning("No GW points data available yet.")
 
@@ -138,9 +197,3 @@ elif selected == "Fines":
         )
         fig.update_traces(textposition="inside", textinfo="percent+label")
         st.plotly_chart(fig, use_container_width=True)
-
-
-
-
-
-
