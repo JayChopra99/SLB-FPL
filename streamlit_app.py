@@ -156,44 +156,41 @@ elif selected == "GW Data":
     gw_points_df = get_all_gw_points(total_gws=total_gws)
 
     if not gw_points_df.empty:
-        # Ensure all 38 GWs exist as columns
-        for gw in range(1, total_gws + 1):
+        gw_cols = list(range(1, total_gws + 1))
+
+        # Ensure all GW columns exist
+        for gw in gw_cols:
             if gw not in gw_points_df.columns:
-                gw_points_df[gw] = 0
+                gw_points_df[gw] = pd.NA
 
         # Convert GW columns to numeric
-        gw_cols = list(range(1, total_gws + 1))
-        gw_points_df[gw_cols] = gw_points_df[gw_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
+        gw_points_df[gw_cols] = gw_points_df[gw_cols].apply(pd.to_numeric, errors='coerce')
 
-        # Sort columns by GW number
+        # Sort columns
         gw_points_df = gw_points_df[['Manager Name'] + gw_cols]
 
-        # Replace 0 points with blank for display
-        display_points_df = gw_points_df.replace(0, "")
-
-        # Rank per GW (only rank non-blank points)
+        # --- Rank calculation ---
         rank_df = gw_points_df.copy()
         for gw in gw_cols:
             rank_df[gw] = (
                 rank_df[gw]
-                .replace(0, pd.NA)
-                .rank(ascending=False, method='min')
-                .astype("Int64")   # keep as integer with NA support
-            )
+                .rank(ascending=False, method='min')  # get ranks
+                .astype('Int64')  # convert to integer with NA support
+    )
 
-        display_rank_df = rank_df  # already integers with NA
+        # --- Precompute min/max per GW for faster styling ---
+        points_max = gw_points_df[gw_cols].max()
+        points_min = gw_points_df[gw_cols].min()
+        rank_max = rank_df[gw_cols].max()
+        rank_min = rank_df[gw_cols].min()
 
         # --- Highlighting functions ---
         def highlight_points(val, col):
-            try:
-                val = float(val)
-            except:
+            if pd.isna(val):
                 return ''
-            max_val = gw_points_df[col].max()
-            min_val = gw_points_df[col].min()
-            if val == max_val:
+            if val == points_max[col]:
                 return 'background-color: lightgreen; font-weight: bold'
-            elif val == min_val or val == 0:
+            elif val == points_min[col]:
                 return 'background-color: salmon'
             else:
                 return ''
@@ -201,25 +198,23 @@ elif selected == "GW Data":
         def highlight_rank(val, col):
             if pd.isna(val):
                 return ''
-            min_val = rank_df[col].min()
-            max_val = rank_df[col].max()
-            if val == min_val:
+            if val == rank_min[col]:
                 return 'background-color: lightgreen; font-weight: bold'
-            elif val == max_val:
+            elif val == rank_max[col]:
                 return 'background-color: salmon'
             else:
                 return ''
 
-        # Apply styles, leave 'Manager Name' column unstyled
-        styled_points_df = display_points_df.style.apply(
+        # --- Apply styling ---
+        styled_points_df = gw_points_df.style.apply(
             lambda row: [''] + [highlight_points(row[gw], gw) for gw in gw_cols], axis=1
         )
 
-        styled_rank_df = display_rank_df.style.apply(
+        styled_rank_df = rank_df.style.apply(
             lambda row: [''] + [highlight_rank(row[gw], gw) for gw in gw_cols], axis=1
         )
 
-        # Display tables with styling
+        # --- Display tables ---
         st.subheader("GW Points per Manager")
         st.dataframe(styled_points_df, use_container_width=True, hide_index=True)
 
@@ -227,7 +222,7 @@ elif selected == "GW Data":
 
         st.subheader("GW Rank per Manager")
         st.dataframe(styled_rank_df, use_container_width=True, hide_index=True)
-        
+
     else:
         st.warning("No GW points data available yet.")
 
