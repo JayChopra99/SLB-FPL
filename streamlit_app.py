@@ -150,7 +150,7 @@ if selected == "Home":
             )
 
         # Add GW 0 as starting point with rank 0
-        rank_df.insert(7, 0, 7)  # insert GW0 after Manager Name
+        rank_df.insert(8, 0, 8)  # insert GW0 after Manager Name
 
         # Reshape to long format
         rank_long = rank_df.melt(
@@ -174,7 +174,7 @@ if selected == "Home":
         )
 
         # Reverse y-axis so rank 1 is on top
-        fig.update_yaxes(autorange="reversed", range=[0, rank_long["Rank"].max()])
+        fig.update_yaxes(autorange="reversed", dtick=1, range=[0, rank_long["Rank"].max()])
 
         # Start x-axis from 0
         fig.update_xaxes(tickmode="linear", dtick=1, range=[0, rank_long["Gameweek"].max()])
