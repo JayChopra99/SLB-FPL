@@ -12,78 +12,73 @@ st.set_page_config(
 )
 
 # ---- Data Functions ----
-@st.cache_data(ttl=60)
-def get_ml_data(league_id=334417, page_id=1, phase=1):
-    url = f"https://fantasy.premierleague.com/api/leagues-classic/{league_id}/standings/?page_standings={page_id}&phase={phase}"
+@st.cache_data(ttl=300)
+def get_league_managers(league_id=334417, page_id=1):
+    url = f"https://fantasy.premierleague.com/api/leagues-classic/{league_id}/standings/?page_standings={page_id}"
     r = requests.get(url).json()
-    new_entries_list = r.get('new_entries', {}).get('results', [])
-    players_df = pd.json_normalize(new_entries_list)
-    players_df = players_df[['entry_name', 'player_first_name', 'player_last_name']]
-    players_df.columns = ['Team Name', 'First Name', 'Last Name']
-    return players_df
+    standings_list = r.get('standings', {}).get('results', [])
+    df = pd.json_normalize(standings_list)
+    if not df.empty:
+        df = df[['entry', 'entry_name', 'player_name']]
+        df.columns = ['Team ID', 'Team Name', 'Manager Name']
+        return df
+    else:
+        return pd.DataFrame(columns=['Team ID', 'Team Name', 'Manager Name'])
+
+@st.cache_data(ttl=300)
+def get_all_gw_points(league_id=334417, total_gws=38):
+    managers_df = get_league_managers(league_id)
+    all_data = []
+
+    for _, row in managers_df.iterrows():
+        team_id = row['Team ID']
+        team_name = row['Team Name']
+        manager_name = row['Manager Name']
+
+        # Fetch individual team data
+        url = f"https://fantasy.premierleague.com/api/entry/{team_id}/history/"
+        r = requests.get(url).json()
+        gw_list = r.get('current', [])  # 'current' has a list of dicts for each GW
+
+        for gw in gw_list:
+            all_data.append({
+                'Team Name': team_name,
+                'Manager Name': manager_name,
+                'GW': gw['event'],
+                'GW Points': gw['points']
+            })
+
+    if all_data:
+        df = pd.DataFrame(all_data)
+        # Pivot so GWs are columns
+        pivot_df = df.pivot(index='Manager Name', columns='GW', values='GW Points').fillna(0)
+        pivot_df.reset_index(inplace=True)
+        return pivot_df
+    else:
+        return pd.DataFrame()
 
 @st.cache_data(ttl=60)
-def fines_data(league_id=334417):
-    url = f"https://fantasy.premierleague.com/api/leagues-classic/{league_id}/standings/"
+def fines_data(league_id=334417, page_id=1):
+    url = f"https://fantasy.premierleague.com/api/leagues-classic/{league_id}/standings/?page_standings={page_id}"
     r = requests.get(url).json()
-    new_entries_list = r.get('new_entries', {}).get('results', [])
-    fines_df = pd.json_normalize(new_entries_list)
-    fines_df = fines_df[['player_first_name', 'player_last_name']]
-    fines_df.columns = ['First Name', 'Last Name']
-    fines_df['Player Name'] = fines_df['First Name'] + " " + fines_df['Last Name']
-    fines_df = fines_df.drop(columns=['First Name', 'Last Name'])
-    fines_df['Total Fine'] = 5  # placeholder
-    return fines_df
+    standings_list = r.get('standings', {}).get('results', [])
+    df = pd.json_normalize(standings_list)
+    if not df.empty:
+        df = df[['entry_name','player_name']]
+        df.columns = ['Team Name','Manager Name']
+        df['Total Fine'] = 5  # placeholder
+        return df
+    else:
+        return pd.DataFrame(columns=['Team Name', 'Manager Name', 'Total Fine'])
 
-@st.cache_data(ttl=60)
-def users_data(league_id=334417):
-    url = f"https://fantasy.premierleague.com/api/leagues-classic/{league_id}/standings/"
-    r = requests.get(url).json()
-    new_entries_list = r.get('new_entries', {}).get('results', [])
-    users_df = pd.json_normalize(new_entries_list)
-    users_df = users_df[['player_first_name', 'player_last_name']]
-    users_df.columns = ['First Name', 'Last Name']
-    users_df['Player Name'] = users_df['First Name'] + " " + users_df['Last Name']
-    users_df = users_df.drop(columns=['First Name', 'Last Name'])
-    users_df['Total Fine'] = 5  # placeholder
-    return users_df
-
-@st.cache_data(ttl=60)
-def gw_data():
-    url = "https://fantasy.premierleague.com/api/bootstrap-static/"
-    r = requests.get(url).json()
-    
-    # Gameweek data
-    events_list = r.get('events', [])
-    gw_df = pd.DataFrame(events_list)[['id', 'name', 'deadline_time', 'finished', 'average_entry_score']]
-    gw_df.columns = ['GW ID', 'GW Name', 'Deadline', 'Finished', 'Average Points']
-    
-    # Phase data
-    phases_list = r.get('phases', [])
-    phases_df = pd.DataFrame(phases_list)[['id', 'name', 'start_event', 'stop_event']]
-    phases_df.columns = ['Phase ID', 'Phase Name', 'Start GW', 'End GW']
-    
-    # Map each GW to its phase
-    phase_lookup = {}
-    for _, row in phases_df.iterrows():
-        for gw in range(row['Start GW'], row['End GW'] + 1):
-            phase_lookup[gw] = row['Phase Name']
-    
-    gw_df['Phase Name'] = gw_df['GW ID'].map(phase_lookup)
-    
-    return gw_df
-
-
-# Sidebar menu
+# ---- Sidebar menu ----
 with st.sidebar:
     selected = option_menu(
         menu_title="",
         options=["Home", "GW Data", "Fines"],
-        icons= ["house-door-fill","database","currency-dollar"],
-        menu_icon= [""],
+        icons=["house-door-fill","database","currency-dollar"],
         default_index=0
     )
-    
 
 # ---- Main Page Layout ----
 if selected == "Home":
@@ -103,45 +98,26 @@ if selected == "Home":
         )
     st.markdown("---")
 
- 
-  
-
-
 elif selected == "GW Data":
-    gw_option = st.selectbox(
-        "Select GameWeek:",
-        list(range(1, 39)),
-        index=0,
-        format_func=lambda x: f"GameWeek {x}",
-        help="Select the gameweek to view data for."
-    )
-    ml_df = get_ml_data(phase=gw_option)
-    fines_df = fines_data()
+    total_gws = 38
+    gw_points_df = get_all_gw_points(total_gws=total_gws)
 
-    st.subheader(f"League Table - GameWeek {gw_option}")
-    st.dataframe(ml_df, use_container_width=True, hide_index=True)
-    st.markdown("---")
+    if not gw_points_df.empty:
+        gw_option = st.selectbox(
+            "Select GameWeek:",
+            list(range(1, total_gws+1)),
+            index=0,
+            format_func=lambda x: f"GameWeek {x}"
+        )
 
-    gwm2_df = gw_data()
+        # Filter columns up to selected GW
+        cols_to_show = ['Manager Name'] + [col for col in gw_points_df.columns if isinstance(col, int) and col <= gw_option]
+        filtered_df = gw_points_df[cols_to_show]
 
-    st.subheader(f"GameWeek")
-    st.dataframe(gwm2_df, use_container_width=True, hide_index=True)
-    st.markdown("---")
-
-     # ---- Get and display GW vs Player chart ----
-    users_df = users_data()
-    fig = px.scatter(
-        users_df,
-        x="Total Fine",
-        y="Player Name",
-        size="Total Fine",
-        color="Total Fine",
-        title="GameWeek Performance by Player",
-        labels={"GW Points": "Points"},
-        hover_name="Player Name"
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
+        st.subheader(f"GW Points per Manager up to GameWeek {gw_option}")
+        st.dataframe(filtered_df, use_container_width=True, hide_index=True)
+    else:
+        st.warning("No GW points data available yet.")
 
 elif selected == "Fines":
     fines_df = fines_data()
@@ -155,13 +131,12 @@ elif selected == "Fines":
         st.subheader("Fines Distribution")
         fig = px.pie(
             fines_df,
-            values='Total Fine',
-            names='Player Name',
-            hover_data=['Total Fine'],
-            labels={'Total Fine': '£'}
+            values="Total Fine",
+            names="Manager Name",
+            title="Fines Distribution",
+            hover_data=["Team Name"]
         )
-        fig.update_traces(textposition='inside', textinfo='percent+label')
-        fig.update_layout(height=300, margin=dict(t=0))
+        fig.update_traces(textposition="inside", textinfo="percent+label")
         st.plotly_chart(fig, use_container_width=True)
 
 
