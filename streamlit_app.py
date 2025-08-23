@@ -177,9 +177,9 @@ def make_chart_mobile_friendly(fig, total_gws, gw_range=(0, 38)):
             y=-0.7,
             xanchor="center",
             x=0.4,
-            font=dict(size=9)
+            font=dict(size=12)
         ),
-        font=dict(size=6),
+        font=dict(size=9),
         hovermode="x unified"
     )
 
@@ -501,69 +501,62 @@ elif selected == "GW Data":
 
 # ---- Fines Tab ----
 elif selected == "Fines":
-    # Get fines data
+    # Fetch fines data
     total_fines_df, weekly_fines_df, monthly_fines_df, annual_fines_df = fines_data()
 
-    fines_col1, fines_col2 = st.columns([0.8, 0.5])
+    if not total_fines_df.empty:
+        fines_col1, fines_col2 = st.columns([0.8, 0.5])
 
-    # ---- Fines Overview Table ----
-# ---- Fines Overview Table ----
-with fines_col1:
-    st.subheader("Fines Overview")
-    
-    # Prepare display table with pounds formatting
-    display_df = total_fines_df.copy()
-    
-    # Add a "Total" row
-    totals = display_df[['Weekly Fine', 'Monthly Fine', 'Annual Fine', 'Total Fine']].sum()
-    totals_row = pd.DataFrame({
-        'Manager Name': ['Total'],
-        'Weekly Fine': [totals['Weekly Fine']],
-        'Monthly Fine': [totals['Monthly Fine']],
-        'Annual Fine': [totals['Annual Fine']],
-        'Total Fine': [totals['Total Fine']]
-    })
-    display_df = pd.concat([display_df, totals_row], ignore_index=True)
-    
-    # Format as £
-    for col in ['Weekly Fine', 'Monthly Fine', 'Annual Fine', 'Total Fine']:
-        display_df[col] = display_df[col].apply(lambda x: f"£{x:.2f}")
+        # ---- Fines Overview Table ----
+        with fines_col1:
+            st.subheader("Fines Overview")
 
-    # Styling function
-    def style_fines(row):
-        styles = ['']*5  # default white background
-        if row['Manager Name'] == 'Total':
-            styles[0:4] = ['font-weight: bold; color: white']*4  # Total row except Total Fine
-            styles[4] = 'font-weight: bold; color: blue'         # Total row & Total Fine column
-        else:
-            styles[4] = 'font-weight: bold'  # keep Total Fine column normal for other rows
-        return styles
+            display_df = total_fines_df.copy()
 
-    styled_df = display_df.style.apply(style_fines, axis=1)
-    
-    # Reorder columns for display
-    display_df = display_df[['Manager Name', 'Weekly Fine', 'Monthly Fine', 'Annual Fine', 'Total Fine']]
+            # Add "Total" row
+            totals = display_df[['Weekly Fine', 'Monthly Fine', 'Annual Fine', 'Total Fine']].sum()
+            totals_row = pd.DataFrame({
+                'Manager Name': ['Total'],
+                'Weekly Fine': [totals['Weekly Fine']],
+                'Monthly Fine': [totals['Monthly Fine']],
+                'Annual Fine': [totals['Annual Fine']],
+                'Total Fine': [totals['Total Fine']]
+            })
+            display_df = pd.concat([display_df, totals_row], ignore_index=True)
 
-    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            # Create separate formatted display columns
+            formatted_df = display_df.copy()
+            for col in ['Weekly Fine', 'Monthly Fine', 'Annual Fine', 'Total Fine']:
+                formatted_df[col] = formatted_df[col].apply(lambda x: f"£{x:.2f}")
 
-        # ---- Total Fines Pie Chart ----
-    with fines_col2:
-        st.subheader("Fines Distribution")
-        if not total_fines_df.empty:
-            fig = px.pie(
+            # Styling function
+            def style_fines(row):
+                styles = [''] * 5
+                if row['Manager Name'] == 'Total':
+                    styles = ['font-weight: bold; background-color: #444; color: white'] * 5
+                return styles
+
+            styled_df = formatted_df.style.apply(style_fines, axis=1)
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+
+        # ---- Fines Charts ----
+        with fines_col2:
+            st.subheader("Fines Distribution")
+
+            # Pie Chart
+            fig_pie = px.pie(
                 total_fines_df,
                 values="Total Fine",
                 names="Manager Name",
                 title="",
                 hover_data=["Weekly Fine", "Monthly Fine", "Annual Fine"]
             )
-            fig.update_traces(
+            fig_pie.update_traces(
                 textposition="inside",
                 textinfo="percent+label",
                 hovertemplate="%{label}: £%{value:.2f} (%{percent})"
             )
-            # Move legend under the pie
-            fig.update_layout(
+            fig_pie.update_layout(
                 legend=dict(
                     orientation="h",
                     yanchor="top",
@@ -574,9 +567,8 @@ with fines_col1:
                 ),
                 autosize=True,
                 height=450,
-                margin=dict(l=10, r=10, t=40, b=40)
+                margin=dict(l=10, r=10, t=40, b=10)
             )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No fines to display yet. GWs may not have finished.")
-
+            st.plotly_chart(fig_pie, use_container_width=True)
+    else:
+        st.info("No fines to display yet. GWs may not have finished.")
