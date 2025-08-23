@@ -531,9 +531,12 @@ elif selected == "Fines":
 
             # Styling function
             def style_fines(row):
-                styles = [''] * 5
+                styles = [''] * 5  # default: no style
+                # Bold only Total Fine column
+                styles[4] = 'font-weight: bold'
+                # Highlight Total row
                 if row['Manager Name'] == 'Total':
-                    styles = ['font-weight: bold; background-color: #444; color: white'] * 5
+                    styles = ['font-weight: bold; background-color: #444; color: white'] * 4 + ['font-weight: bold; color: blue; background-color: #444']
                 return styles
 
             styled_df = formatted_df.style.apply(style_fines, axis=1)
