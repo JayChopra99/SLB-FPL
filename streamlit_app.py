@@ -96,7 +96,7 @@ def make_chart_mobile_friendly(fig, total_gws, gw_range=(0, 38)):
     fig.update_layout(
         autosize=True,
         height=450,
-        margin=dict(l=0, r=0, t=0, b=0),
+        margin=dict(l=10, r=10, t=10, b=10),
         legend=dict(
             orientation="h",
             yanchor="bottom",
