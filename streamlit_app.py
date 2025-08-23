@@ -556,6 +556,20 @@ elif selected == "Fines":
                 textinfo="percent+label",
                 hovertemplate="%{label}: £%{value:.2f} (%{percent})"
             )
+            # Move legend under the pie
+            fig.update_layout(
+                legend=dict(
+                    orientation="h",
+                    yanchor="top",
+                    y=-0.2,
+                    xanchor="center",
+                    x=0.5,
+                    title=""
+                ),
+                autosize=True,
+                height=450,
+                margin=dict(l=10, r=10, t=40, b=40)
+            )
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No fines to display yet. GWs may not have finished.")
