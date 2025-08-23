@@ -167,9 +167,32 @@ if selected == "Home":
                 title="GW Rank Progression"
             )
             fig_rank.update_traces(connectgaps=False)
+
+            # Responsive layout tweaks
+            fig_rank.update_layout(
+                autosize=True,
+                height=400,  # shorter height for phones
+                margin=dict(l=20, r=20, t=40, b=40),
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=-0.5,    # push legend below chart
+                    xanchor="center",
+                    x=0.5,
+                    font=dict(size=10)
+                ),
+                font=dict(size=10)  # smaller text
+            )
+
             fig_rank.update_yaxes(autorange="reversed", dtick=1)
-            fig_rank.update_xaxes(tickmode="linear", dtick=1, range=[0, total_gws])  # now includes 0
-            st.plotly_chart(fig_rank, use_container_width=True)
+            fig_rank.update_xaxes(
+                tickmode="linear",
+                dtick=2,        # fewer ticks so labels don’t overlap
+                range=[0, total_gws],
+                automargin=True
+            )
+
+            st.plotly_chart(fig_rank, use_container_width=True, config={"responsive": True})
 
 
         # ---- Tab 2: Total Points Rank Progression ----
@@ -213,9 +236,32 @@ if selected == "Home":
                 title="Total Points Rank Progression"
             )
             fig_cum.update_traces(connectgaps=False)
+
+            # Responsive layout tweaks
+            fig_cum.update_layout(
+                autosize=True,
+                height=400,  # shorter height for phones
+                margin=dict(l=20, r=20, t=40, b=40),
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=-0.5,    # move legend below chart
+                    xanchor="center",
+                    x=0.5,
+                    font=dict(size=10)
+                ),
+                font=dict(size=10)  # smaller labels for mobile
+            )
+
             fig_cum.update_yaxes(autorange="reversed", dtick=1)
-            fig_cum.update_xaxes(tickmode="linear", dtick=1, range=[0, total_gws])  # include 0
-            st.plotly_chart(fig_cum, use_container_width=True)
+            fig_cum.update_xaxes(
+                tickmode="linear",
+                dtick=2,        # fewer ticks so labels don’t overlap
+                range=[0, total_gws],
+                automargin=True
+            )
+
+            st.plotly_chart(fig_cum, use_container_width=True, config={"responsive": True})
 
 
 elif selected == "GW Data":
