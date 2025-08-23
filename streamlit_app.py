@@ -57,18 +57,92 @@ def get_all_gw_points(league_id=334417, total_gws=38):
         return pd.DataFrame()
 
 @st.cache_data(ttl=60)
-def fines_data(league_id=334417, page_id=1):
-    url = f"https://fantasy.premierleague.com/api/leagues-classic/{league_id}/standings/?page_standings={page_id}"
-    r = requests.get(url).json()
-    standings_list = r.get('standings', {}).get('results', [])
-    df = pd.json_normalize(standings_list)
-    if not df.empty:
-        df = df[['entry_name','player_name']]
-        df.columns = ['Team Name','Manager Name']
-        df['Total Fine'] = 5
-        return df
-    else:
-        return pd.DataFrame(columns=['Team Name', 'Manager Name', 'Total Fine'])
+def fines_data(league_id=334417, total_gws=38):
+    # Get GW points
+    gw_points_df = get_all_gw_points(league_id=league_id, total_gws=total_gws)
+    gw_cols = list(range(1, total_gws + 1))
+
+    # Ensure all GW columns exist
+    for gw in gw_cols:
+        if gw not in gw_points_df.columns:
+            gw_points_df[gw] = 0
+    gw_points_df[gw_cols] = gw_points_df[gw_cols].apply(pd.to_numeric, errors='coerce')
+
+    # Get GW metadata
+    gw_df = gw_data()  # contains 'GW ID', 'Finished', 'Month'
+
+    # --- Helper to calculate tie-adjusted fines ---
+    def assign_fines_with_ties(ranks, fines_map):
+        """
+        ranks: Series of rank numbers
+        fines_map: dict {rank_position: fine_amount}
+        Returns Series of fines, shared between ties
+        """
+        fines = pd.Series(index=ranks.index, dtype=float)
+        ranks_sorted = ranks.sort_values()
+        i = 0
+        while i < len(ranks_sorted):
+            rank_val = ranks_sorted.iloc[i]
+            tied = ranks_sorted[ranks_sorted == rank_val]
+            n_tied = len(tied)
+            # Sum fines for tied positions
+            total_fine = sum(fines_map.get(int(rank_val + j), 0) for j in range(n_tied))
+            shared_fine = total_fine / n_tied
+            fines[tied.index] = shared_fine
+            i += n_tied
+        return fines
+
+    # --- Weekly Fines ---
+    weekly_fines_list = []
+    fines_map_weekly = {1: 0, 2: 1.5, 3: 2, 4: 2.5, 5: 3, 6: 3.5, 7: 4}
+    for gw in gw_cols:
+        finished = gw_df.loc[gw_df['GW ID'] == gw, 'Finished'].values
+        if len(finished) > 0 and finished[0]:
+            rank_df = gw_points_df[['Manager Name', gw]].copy()
+            rank_df = rank_df[rank_df['Manager Name'] != "Edgar Fernandez"]
+            rank_df['Rank'] = rank_df[gw].rank(ascending=False, method='min')
+            rank_df['Weekly Fine'] = assign_fines_with_ties(rank_df['Rank'], fines_map_weekly)
+            rank_df['GW'] = gw
+            weekly_fines_list.append(rank_df[['Manager Name', 'GW', 'Weekly Fine']])
+    weekly_fines_df = pd.concat(weekly_fines_list, ignore_index=True) if weekly_fines_list else pd.DataFrame(columns=['Manager Name', 'GW', 'Weekly Fine'])
+
+    # --- Monthly Fines ---
+    monthly_fines_list = []
+    fines_map_monthly = {1: 0, 2: 1.5, 3: 2.5, 4: 3.5, 5: 4.5, 6: 5.5, 7: 6.5}
+    for month, month_gws in gw_df.groupby('Month')['GW ID']:
+        if month_gws.isin(weekly_fines_df['GW']).all():  # all GWs finished
+            month_points = gw_points_df[['Manager Name'] + month_gws.tolist()].copy()
+            month_points['Monthly Total'] = month_points[month_gws.tolist()].sum(axis=1)
+            month_points = month_points[['Manager Name', 'Monthly Total']]
+            month_points = month_points[month_points['Manager Name'] != "Edgar Fernandez"]
+            month_points['Rank'] = month_points['Monthly Total'].rank(ascending=False, method='min')
+            month_points['Monthly Fine'] = assign_fines_with_ties(month_points['Rank'], fines_map_monthly)
+            month_points['Month'] = month
+            monthly_fines_list.append(month_points[['Manager Name', 'Month', 'Monthly Fine']])
+    monthly_fines_df = pd.concat(monthly_fines_list, ignore_index=True) if monthly_fines_list else pd.DataFrame(columns=['Manager Name', 'Month', 'Monthly Fine'])
+
+    # --- Annual Fines ---
+    annual_fines_df = pd.DataFrame(columns=['Manager Name', 'Annual Fine'])
+    if gw_df['Finished'].all():  # all 38 GWs finished
+        annual_points = gw_points_df.copy()
+        annual_points['Annual Total'] = annual_points[gw_cols].sum(axis=1)
+        annual_points = annual_points[['Manager Name', 'Annual Total']]
+        annual_points = annual_points[annual_points['Manager Name'] != "Edgar Fernandez"]
+        annual_points['Rank'] = annual_points['Annual Total'].rank(ascending=False, method='min')
+        fines_map_annual = {1: 0, 2: 10, 3: 15, 4: 25, 5: 35, 6: 50, 7: 65}
+        annual_points['Annual Fine'] = assign_fines_with_ties(annual_points['Rank'], fines_map_annual)
+        annual_fines_df = annual_points[['Manager Name', 'Annual Fine']]
+
+    # --- Total Fines ---
+    total_weekly = weekly_fines_df.groupby('Manager Name')['Weekly Fine'].sum().reset_index()
+    total_monthly = monthly_fines_df.groupby('Manager Name')['Monthly Fine'].sum().reset_index()
+    total_fines_df = pd.merge(total_weekly, total_monthly, on='Manager Name', how='outer').fillna(0)
+    total_fines_df = pd.merge(total_fines_df, annual_fines_df, on='Manager Name', how='outer').fillna(0)
+    total_fines_df['Total Fine'] = total_fines_df['Weekly Fine'] + total_fines_df['Monthly Fine'] + total_fines_df['Annual Fine']
+
+    return total_fines_df, weekly_fines_df, monthly_fines_df, annual_fines_df
+
+
 
 @st.cache_data(ttl=60)
 def gw_data():
@@ -425,22 +499,42 @@ elif selected == "GW Data":
     else:
         st.warning("No GW points data available yet.")
 
+# ---- Fines Tab ----
 elif selected == "Fines":
-    fines_df = fines_data()
+    # Get fines data
+    total_fines_df, weekly_fines_df, monthly_fines_df, annual_fines_df = fines_data()
 
-    fines_col1, fines_col2 = st.columns([0.5, 0.5])
+    fines_col1, fines_col2 = st.columns([0.8, 0.5])
+
+    # ---- Fines Overview Table ----
     with fines_col1:
         st.subheader("Fines Overview")
-        st.dataframe(fines_df, use_container_width=True, hide_index=True)
+        
+        # Prepare display table with pounds formatting
+        display_df = total_fines_df.copy()
+        for col in ['Weekly Fine', 'Monthly Fine', 'Annual Fine', 'Total Fine']:
+            display_df[col] = display_df[col].apply(lambda x: f"£{x:.2f}")
 
+        display_df = display_df[['Manager Name', 'Weekly Fine', 'Monthly Fine', 'Annual Fine', 'Total Fine']]
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+    # ---- Total Fines Pie Chart ----
     with fines_col2:
         st.subheader("Fines Distribution")
-        fig = px.pie(
-            fines_df,
-            values="Total Fine",
-            names="Manager Name",
-            title="Fines Distribution",
-            hover_data=["Team Name"]
-        )
-        fig.update_traces(textposition="inside", textinfo="percent+label")
-        st.plotly_chart(fig, use_container_width=True)
+        if not total_fines_df.empty:
+            fig = px.pie(
+                total_fines_df,
+                values="Total Fine",
+                names="Manager Name",
+                title="",
+                hover_data=["Weekly Fine", "Monthly Fine", "Annual Fine"]
+            )
+            fig.update_traces(
+                textposition="inside",
+                textinfo="percent+label",
+                hovertemplate="%{label}: £%{value:.2f} (%{percent})"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No fines to display yet. GWs may not have finished.")
+
