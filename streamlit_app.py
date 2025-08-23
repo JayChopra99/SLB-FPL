@@ -190,7 +190,7 @@ if selected == "Home":
                 y="Rank",
                 color="Manager Name",
                 markers=True,
-                title="GW Rank Progression"
+                title=""
             )
             fig_rank.update_traces(connectgaps=False)
             make_chart_mobile_friendly(fig_rank, total_gws)
@@ -231,7 +231,7 @@ if selected == "Home":
                 y="Rank",
                 color="Manager Name",
                 markers=True,
-                title="Total Points Rank Progression"
+                title=""
             )
             fig_cum.update_traces(connectgaps=False)
             make_chart_mobile_friendly(fig_cum, total_gws)
