@@ -36,10 +36,9 @@ def get_all_gw_points(league_id=334417, total_gws=38):
         team_name = row['Team Name']
         manager_name = row['Manager Name']
 
-        # Fetch individual team data
         url = f"https://fantasy.premierleague.com/api/entry/{team_id}/history/"
         r = requests.get(url).json()
-        gw_list = r.get('current', [])  # 'current' has a list of dicts for each GW
+        gw_list = r.get('current', [])
 
         for gw in gw_list:
             all_data.append({
@@ -51,7 +50,6 @@ def get_all_gw_points(league_id=334417, total_gws=38):
 
     if all_data:
         df = pd.DataFrame(all_data)
-        # Pivot so GWs are columns
         pivot_df = df.pivot(index='Manager Name', columns='GW', values='GW Points').fillna(0)
         pivot_df.reset_index(inplace=True)
         return pivot_df
@@ -67,42 +65,37 @@ def fines_data(league_id=334417, page_id=1):
     if not df.empty:
         df = df[['entry_name','player_name']]
         df.columns = ['Team Name','Manager Name']
-        df['Total Fine'] = 5  # placeholder
+        df['Total Fine'] = 5
         return df
     else:
         return pd.DataFrame(columns=['Team Name', 'Manager Name', 'Total Fine'])
-@st.cache_data(ttl=60)    
+
+@st.cache_data(ttl=60)
 def gw_data():
     url = "https://fantasy.premierleague.com/api/bootstrap-static/"
     r = requests.get(url).json()
-    
-    # Gameweek data
     events_list = r.get('events', [])
     gw_df = pd.DataFrame(events_list)[['id', 'name', 'deadline_time', 'finished', 'average_entry_score']]
     gw_df.columns = ['GW ID', 'GW Name', 'Deadline', 'Finished', 'Average Points']
-    
-    # Phase data
+
     phases_list = r.get('phases', [])
     phases_df = pd.DataFrame(phases_list)[['id', 'name', 'start_event', 'stop_event']]
     phases_df.columns = ['Phase ID', 'Phase Name', 'Start GW', 'End GW']
-    
-    # Map each GW to its phase
+
     phase_lookup = {}
     for _, row in phases_df.iterrows():
         for gw in range(row['Start GW'], row['End GW'] + 1):
             phase_lookup[gw] = row['Phase Name']
     gw_df['Phase Name'] = gw_df['GW ID'].map(phase_lookup)
-    
-    # Convert deadline to datetime & extract month
+
     gw_df['Deadline'] = pd.to_datetime(gw_df['Deadline'])
-    gw_df['Month'] = gw_df['Deadline'].dt.to_period('M')  # e.g., 2025-08
-    
+    gw_df['Month'] = gw_df['Deadline'].dt.to_period('M')
     return gw_df
 
-def make_chart_mobile_friendly(fig, total_gws):
+def make_chart_mobile_friendly(fig, total_gws, gw_range=(0, 38)):
     fig.update_layout(
         autosize=True,
-        height=450,  # shorter height for phones
+        height=450,
         margin=dict(l=0, r=0, t=0, b=0),
         legend=dict(
             orientation="h",
@@ -115,16 +108,16 @@ def make_chart_mobile_friendly(fig, total_gws):
         font=dict(size=6),
         hovermode="x unified"
     )
-    
+
     fig.update_yaxes(autorange="reversed", dtick=1, automargin=True)
     fig.update_xaxes(
         tickmode="linear",
-        dtick=1,  # fewer ticks to prevent overlap
-        range=[0, total_gws],
+        dtick=max(1, int((gw_range[1]-gw_range[0])/10)),  # dynamic tick spacing
+        range=[gw_range[0], gw_range[1]],
         automargin=True,
         tickangle=45
     )
-    
+
     st.plotly_chart(fig, use_container_width=True, config={"responsive": True})
 
 # ---- Sidebar menu ----
@@ -157,7 +150,6 @@ if selected == "Home":
     gw_points_df = get_all_gw_points(total_gws=total_gws)
 
     if not gw_points_df.empty:
-        # Ensure all 38 GWs exist
         for gw in range(1, total_gws + 1):
             if gw not in gw_points_df.columns:
                 gw_points_df[gw] = pd.NA
@@ -165,12 +157,10 @@ if selected == "Home":
         gw_cols = list(range(1, total_gws + 1))
         gw_points_df[gw_cols] = gw_points_df[gw_cols].apply(pd.to_numeric, errors='coerce')
 
-        # ---- Current GW from API ----
         r = requests.get("https://fantasy.premierleague.com/api/bootstrap-static/").json()
         events = r.get("events", [])
         current_gw = next((e["id"] for e in events if e.get("is_current")), 1)
 
-        # ---- Shared GW Range Slider ----
         gw_range = st.slider(
             "Select GW Range",
             min_value=0,
@@ -179,18 +169,26 @@ if selected == "Home":
             step=1
         )
 
-        # ---- Tabs ----
         rank_tab, cumulative_tab = st.tabs(["GW Rank Progression", "Total Points Rank Progression"])
 
-        # ---- Tab 1: GW Rank Progression ----
+        # ---- Function to add GW 0 with start rank ----
+        def add_gw0_start(df_long, start_rank=8):
+            managers = df_long['Manager Name'].unique()
+            gw0_df = pd.DataFrame({
+                'Manager Name': managers,
+                'Gameweek': 0,
+                'Rank': start_rank
+            })
+            df_long = pd.concat([gw0_df, df_long], ignore_index=True)
+            df_long = df_long.sort_values(['Manager Name', 'Gameweek'])
+            return df_long
+
+        # ---- GW Rank Tab ----
         with rank_tab:
             rank_df = gw_points_df.copy()
-            
-            # Rank per GW
             for gw in gw_cols:
                 rank_df[gw] = rank_df[gw].rank(ascending=False, method='min')
 
-            # Convert to long format
             rank_long = rank_df.melt(
                 id_vars=["Manager Name"],
                 value_vars=gw_cols,
@@ -198,28 +196,25 @@ if selected == "Home":
                 value_name="Rank"
             )
             rank_long["Gameweek"] = rank_long["Gameweek"].astype(int)
-
-            # Filter by slider range
             rank_long_filtered = rank_long[
                 (rank_long["Gameweek"] >= gw_range[0]) & 
                 (rank_long["Gameweek"] <= gw_range[1])
             ]
+
+            # Add GW 0 starting at rank 8
+            rank_long_filtered = add_gw0_start(rank_long_filtered, start_rank=8)
 
             fig_rank = px.line(
                 rank_long_filtered,
                 x="Gameweek",
                 y="Rank",
                 color="Manager Name",
-                markers=True,
-                title=""
+                markers=True
             )
             fig_rank.update_traces(connectgaps=True)
-            fig_rank.update_layout(yaxis=dict(autorange="reversed"))
+            make_chart_mobile_friendly(fig_rank, total_gws, gw_range)
 
-            make_chart_mobile_friendly(fig_rank, total_gws)
-
-
-        # ---- Tab 2: Total Points Rank Progression ----
+        # ---- Total Points Rank Tab ----
         with cumulative_tab:
             cumulative_points = gw_points_df.copy()
             cumulative_points[gw_cols] = cumulative_points[gw_cols].cumsum(axis=1, skipna=True)
@@ -228,7 +223,6 @@ if selected == "Home":
             for gw in gw_cols:
                 cumulative_rank[gw] = cumulative_points[gw].rank(ascending=False, method='min')
 
-            # Convert to long format
             cumulative_long = cumulative_rank.melt(
                 id_vars=["Manager Name"],
                 value_vars=gw_cols,
@@ -236,25 +230,24 @@ if selected == "Home":
                 value_name="Rank"
             )
             cumulative_long["Gameweek"] = cumulative_long["Gameweek"].astype(int)
-
-            # Filter by slider range
             cumulative_long_filtered = cumulative_long[
                 (cumulative_long["Gameweek"] >= gw_range[0]) & 
                 (cumulative_long["Gameweek"] <= gw_range[1])
             ]
+
+            # Add GW 0 starting at rank 8
+            cumulative_long_filtered = add_gw0_start(cumulative_long_filtered, start_rank=8)
 
             fig_cum = px.line(
                 cumulative_long_filtered,
                 x="Gameweek",
                 y="Rank",
                 color="Manager Name",
-                markers=True,
-                title=""
+                markers=True
             )
             fig_cum.update_traces(connectgaps=True)
-            fig_cum.update_layout(yaxis=dict(autorange="reversed"))
+            make_chart_mobile_friendly(fig_cum, total_gws, gw_range)
 
-            make_chart_mobile_friendly(fig_cum, total_gws)
 
 
 elif selected == "GW Data":
