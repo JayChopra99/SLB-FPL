@@ -243,7 +243,7 @@ if selected == "Home":
             step=1
         )
 
-        rank_tab, cumulative_tab = st.tabs(["GW Rank Progression", "Total Points Rank Progression"])
+        cumulative_tab,rank_tab = st.tabs(["Total Points Rank Progression","GW Rank Progression"])
 
         # ---- Function to add GW 0 with start rank ----
         def add_gw0_start(df_long, start_rank=8):
