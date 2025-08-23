@@ -185,81 +185,74 @@ if selected == "Home":
         # ---- Tab 1: GW Rank Progression ----
         with rank_tab:
             rank_df = gw_points_df.copy()
+            
+            # Rank per GW
             for gw in gw_cols:
                 rank_df[gw] = rank_df[gw].rank(ascending=False, method='min')
-            rank_df[0] = 8  # synthetic GW0
 
+            # Convert to long format
             rank_long = rank_df.melt(
                 id_vars=["Manager Name"],
-                value_vars=[0] + gw_cols,
+                value_vars=gw_cols,
                 var_name="Gameweek",
                 value_name="Rank"
             )
             rank_long["Gameweek"] = rank_long["Gameweek"].astype(int)
 
-            # Apply filter from slider
-            rank_long = rank_long[
-                (rank_long["Gameweek"] >= gw_range[0]) &
+            # Filter by slider range
+            rank_long_filtered = rank_long[
+                (rank_long["Gameweek"] >= gw_range[0]) & 
                 (rank_long["Gameweek"] <= gw_range[1])
             ]
 
             fig_rank = px.line(
-                rank_long,
-                x="Gameweek", y="Rank", color="Manager Name",
-                markers=True, title=""
+                rank_long_filtered,
+                x="Gameweek",
+                y="Rank",
+                color="Manager Name",
+                markers=True,
+                title=""
             )
-            fig_rank.update_traces(connectgaps=False)
-
-            # Zoom x-axis to slider range
-            fig_rank.update_layout(xaxis=dict(range=[gw_range[0], gw_range[1]]))
+            fig_rank.update_traces(connectgaps=True)
+            fig_rank.update_layout(yaxis=dict(autorange="reversed"))
 
             make_chart_mobile_friendly(fig_rank, total_gws)
+
 
         # ---- Tab 2: Total Points Rank Progression ----
         with cumulative_tab:
             cumulative_points = gw_points_df.copy()
             cumulative_points[gw_cols] = cumulative_points[gw_cols].cumsum(axis=1, skipna=True)
 
-            # Mask values beyond last valid GW
-            for i, row in gw_points_df.iterrows():
-                last_played = row[gw_cols].last_valid_index()
-                if last_played is not None and pd.notna(row[last_played]):
-                    last_gw = int(last_played)
-                    for gw in gw_cols:
-                        if gw > last_gw and pd.isna(row[gw]):
-                            cumulative_points.loc[i, gw] = pd.NA
-                else:
-                    cumulative_points.loc[i, gw_cols] = pd.NA
-
-            cumulative_points[0] = 0
             cumulative_rank = cumulative_points.copy()
             for gw in gw_cols:
                 cumulative_rank[gw] = cumulative_points[gw].rank(ascending=False, method='min')
-            cumulative_rank[0] = 8
 
+            # Convert to long format
             cumulative_long = cumulative_rank.melt(
                 id_vars=["Manager Name"],
-                value_vars=[0] + gw_cols,
+                value_vars=gw_cols,
                 var_name="Gameweek",
                 value_name="Rank"
             )
             cumulative_long["Gameweek"] = cumulative_long["Gameweek"].astype(int)
 
-            # Apply filter from slider
-            cumulative_long = cumulative_long[
-                (cumulative_long["Gameweek"] >= gw_range[0]) &
+            # Filter by slider range
+            cumulative_long_filtered = cumulative_long[
+                (cumulative_long["Gameweek"] >= gw_range[0]) & 
                 (cumulative_long["Gameweek"] <= gw_range[1])
             ]
 
             fig_cum = px.line(
-                cumulative_long,
-                x="Gameweek", y="Rank", color="Manager Name",
-                markers=True, title=""
+                cumulative_long_filtered,
+                x="Gameweek",
+                y="Rank",
+                color="Manager Name",
+                markers=True,
+                title=""
             )
-            fig_cum.update_traces(connectgaps=False)
-
-            # Zoom x-axis to slider range
-            fig_cum.update_layout(xaxis=dict(range=[gw_range[0], gw_range[1]]))
+            fig_cum.update_traces(connectgaps=True)
+            fig_cum.update_layout(yaxis=dict(autorange="reversed"))
 
             make_chart_mobile_friendly(fig_cum, total_gws)
 
