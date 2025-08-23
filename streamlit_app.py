@@ -507,40 +507,46 @@ elif selected == "Fines":
     fines_col1, fines_col2 = st.columns([0.8, 0.5])
 
     # ---- Fines Overview Table ----
-    with fines_col1:
-        st.subheader("Fines Overview")
-        
-        # Prepare display table with pounds formatting
-        display_df = total_fines_df.copy()
-        
-        # Add a "Total" row
-        totals = display_df[['Weekly Fine', 'Monthly Fine', 'Annual Fine', 'Total Fine']].sum()
-        totals_row = pd.DataFrame({
-            'Manager Name': ['Total'],
-            'Weekly Fine': [totals['Weekly Fine']],
-            'Monthly Fine': [totals['Monthly Fine']],
-            'Annual Fine': [totals['Annual Fine']],
-            'Total Fine': [totals['Total Fine']]
-        })
-        display_df = pd.concat([display_df, totals_row], ignore_index=True)
-        
-        # Format as £
-        for col in ['Weekly Fine', 'Monthly Fine', 'Annual Fine', 'Total Fine']:
-            display_df[col] = display_df[col].apply(lambda x: f"£{x:.2f}")
+# ---- Fines Overview Table ----
+with fines_col1:
+    st.subheader("Fines Overview")
+    
+    # Prepare display table with pounds formatting
+    display_df = total_fines_df.copy()
+    
+    # Add a "Total" row
+    totals = display_df[['Weekly Fine', 'Monthly Fine', 'Annual Fine', 'Total Fine']].sum()
+    totals_row = pd.DataFrame({
+        'Manager Name': ['Total'],
+        'Weekly Fine': [totals['Weekly Fine']],
+        'Monthly Fine': [totals['Monthly Fine']],
+        'Annual Fine': [totals['Annual Fine']],
+        'Total Fine': [totals['Total Fine']]
+    })
+    display_df = pd.concat([display_df, totals_row], ignore_index=True)
+    
+    # Format as £
+    for col in ['Weekly Fine', 'Monthly Fine', 'Annual Fine', 'Total Fine']:
+        display_df[col] = display_df[col].apply(lambda x: f"£{x:.2f}")
 
-        # Apply styling for Total row
-        def highlight_total_row(row):
-            if row['Manager Name'] == 'Total':
-                return ['font-weight: bold; color: blue']*5
-            else:
-                return ['']*5
+    # Styling function
+    def style_fines(row):
+        styles = ['']*5  # default white background
+        if row['Manager Name'] == 'Total':
+            styles[0:4] = ['font-weight: bold; color: white']*4  # Total row except Total Fine
+            styles[4] = 'font-weight: bold; color: blue'         # Total row & Total Fine column
+        else:
+            styles[4] = 'font-weight: bold'  # keep Total Fine column normal for other rows
+        return styles
 
-        styled_df = display_df.style.apply(highlight_total_row, axis=1)
-        display_df = display_df[['Manager Name', 'Weekly Fine', 'Monthly Fine', 'Annual Fine', 'Total Fine']]
+    styled_df = display_df.style.apply(style_fines, axis=1)
+    
+    # Reorder columns for display
+    display_df = display_df[['Manager Name', 'Weekly Fine', 'Monthly Fine', 'Annual Fine', 'Total Fine']]
 
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-    # ---- Total Fines Pie Chart ----
+        # ---- Total Fines Pie Chart ----
     with fines_col2:
         st.subheader("Fines Distribution")
         if not total_fines_df.empty:
