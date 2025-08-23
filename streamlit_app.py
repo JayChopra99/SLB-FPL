@@ -99,6 +99,34 @@ def gw_data():
     
     return gw_df
 
+def make_chart_mobile_friendly(fig, total_gws):
+    fig.update_layout(
+        autosize=True,
+        height=450,  # shorter height for phones
+        margin=dict(l=0, r=0, t=0, b=0),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.7,
+            xanchor="center",
+            x=0.4,
+            font=dict(size=9)
+        ),
+        font=dict(size=6),
+        hovermode="x unified"
+    )
+    
+    fig.update_yaxes(autorange="reversed", dtick=1, automargin=True)
+    fig.update_xaxes(
+        tickmode="linear",
+        dtick=1,  # fewer ticks to prevent overlap
+        range=[0, total_gws],
+        automargin=True,
+        tickangle=45
+    )
+    
+    st.plotly_chart(fig, use_container_width=True, config={"responsive": True})
+
 # ---- Sidebar menu ----
 with st.sidebar:
     selected = option_menu(
@@ -133,7 +161,7 @@ if selected == "Home":
         # Ensure all 38 GWs exist
         for gw in range(1, total_gws + 1):
             if gw not in gw_points_df.columns:
-                gw_points_df[gw] = pd.NA   # leave missing as NaN
+                gw_points_df[gw] = pd.NA
 
         gw_cols = list(range(1, total_gws + 1))
         gw_points_df[gw_cols] = gw_points_df[gw_cols].apply(pd.to_numeric, errors='coerce')
@@ -146,13 +174,11 @@ if selected == "Home":
             rank_df = gw_points_df.copy()
             for gw in gw_cols:
                 rank_df[gw] = rank_df[gw].rank(ascending=False, method='min')
-
-            # add synthetic GW0 column with rank 8 for all
-            rank_df[0] = 8  
+            rank_df[0] = 8  # synthetic GW0
 
             rank_long = rank_df.melt(
                 id_vars=["Manager Name"],
-                value_vars=[0] + gw_cols,   # include GW0
+                value_vars=[0] + gw_cols,
                 var_name="Gameweek",
                 value_name="Rank"
             )
@@ -167,33 +193,7 @@ if selected == "Home":
                 title="GW Rank Progression"
             )
             fig_rank.update_traces(connectgaps=False)
-
-            # Responsive layout tweaks
-            fig_rank.update_layout(
-                autosize=True,
-                height=400,  # shorter height for phones
-                margin=dict(l=20, r=20, t=40, b=40),
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=-0.5,    # push legend below chart
-                    xanchor="center",
-                    x=0.5,
-                    font=dict(size=10)
-                ),
-                font=dict(size=10)  # smaller text
-            )
-
-            fig_rank.update_yaxes(autorange="reversed", dtick=1)
-            fig_rank.update_xaxes(
-                tickmode="linear",
-                dtick=2,        # fewer ticks so labels don’t overlap
-                range=[0, total_gws],
-                automargin=True
-            )
-
-            st.plotly_chart(fig_rank, use_container_width=True, config={"responsive": True})
-
+            make_chart_mobile_friendly(fig_rank, total_gws)
 
         # ---- Tab 2: Total Points Rank Progression ----
         with cumulative_tab:
@@ -211,17 +211,15 @@ if selected == "Home":
                 else:
                     cumulative_points.loc[i, gw_cols] = pd.NA
 
-            # add GW0 = 0 points for everyone
-            cumulative_points[0] = 0  
-
+            cumulative_points[0] = 0  # GW0
             cumulative_rank = cumulative_points.copy()
             for gw in gw_cols:
                 cumulative_rank[gw] = cumulative_points[gw].rank(ascending=False, method='min')
-            cumulative_rank[0] = 8  # GW0 start rank
+            cumulative_rank[0] = 8
 
             cumulative_long = cumulative_rank.melt(
                 id_vars=["Manager Name"],
-                value_vars=[0] + gw_cols,   # include GW0
+                value_vars=[0] + gw_cols,
                 var_name="Gameweek",
                 value_name="Rank"
             )
@@ -236,32 +234,10 @@ if selected == "Home":
                 title="Total Points Rank Progression"
             )
             fig_cum.update_traces(connectgaps=False)
+            make_chart_mobile_friendly(fig_cum, total_gws)
 
-            # Responsive layout tweaks
-            fig_cum.update_layout(
-                autosize=True,
-                height=400,  # shorter height for phones
-                margin=dict(l=20, r=20, t=40, b=40),
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=-0.5,    # move legend below chart
-                    xanchor="center",
-                    x=0.5,
-                    font=dict(size=10)
-                ),
-                font=dict(size=10)  # smaller labels for mobile
-            )
-
-            fig_cum.update_yaxes(autorange="reversed", dtick=1)
-            fig_cum.update_xaxes(
-                tickmode="linear",
-                dtick=2,        # fewer ticks so labels don’t overlap
-                range=[0, total_gws],
-                automargin=True
-            )
-
-            st.plotly_chart(fig_cum, use_container_width=True, config={"responsive": True})
+    else:
+        st.warning("No GW points data available yet.")
 
 
 elif selected == "GW Data":
