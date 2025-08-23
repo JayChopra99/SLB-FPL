@@ -129,93 +129,93 @@ if selected == "Home":
     total_gws = 38
     gw_points_df = get_all_gw_points(total_gws=total_gws)
 
-if not gw_points_df.empty:
-    # Ensure all 38 GWs exist
-    for gw in range(1, total_gws + 1):
-        if gw not in gw_points_df.columns:
-            gw_points_df[gw] = pd.NA   # leave missing as NaN
+    if not gw_points_df.empty:
+        # Ensure all 38 GWs exist
+        for gw in range(1, total_gws + 1):
+            if gw not in gw_points_df.columns:
+                gw_points_df[gw] = pd.NA   # leave missing as NaN
 
-    gw_cols = list(range(1, total_gws + 1))
-    gw_points_df[gw_cols] = gw_points_df[gw_cols].apply(pd.to_numeric, errors='coerce')
+        gw_cols = list(range(1, total_gws + 1))
+        gw_points_df[gw_cols] = gw_points_df[gw_cols].apply(pd.to_numeric, errors='coerce')
 
-    # ---- Tabs ----
-    rank_tab, cumulative_tab = st.tabs(["GW Rank Progression", "Total Points Rank Progression"])
+        # ---- Tabs ----
+        rank_tab, cumulative_tab = st.tabs(["GW Rank Progression", "Total Points Rank Progression"])
 
-    # ---- Tab 1: GW Rank Progression ----
-    with rank_tab:
-        rank_df = gw_points_df.copy()
-        for gw in gw_cols:
-            rank_df[gw] = rank_df[gw].rank(ascending=False, method='min')
+        # ---- Tab 1: GW Rank Progression ----
+        with rank_tab:
+            rank_df = gw_points_df.copy()
+            for gw in gw_cols:
+                rank_df[gw] = rank_df[gw].rank(ascending=False, method='min')
 
-        # add synthetic GW0 column with rank 8 for all
-        rank_df[0] = 8  
+            # add synthetic GW0 column with rank 8 for all
+            rank_df[0] = 8  
 
-        rank_long = rank_df.melt(
-            id_vars=["Manager Name"],
-            value_vars=[0] + gw_cols,   # include GW0
-            var_name="Gameweek",
-            value_name="Rank"
-        )
-        rank_long["Gameweek"] = rank_long["Gameweek"].astype(int)
+            rank_long = rank_df.melt(
+                id_vars=["Manager Name"],
+                value_vars=[0] + gw_cols,   # include GW0
+                var_name="Gameweek",
+                value_name="Rank"
+            )
+            rank_long["Gameweek"] = rank_long["Gameweek"].astype(int)
 
-        fig_rank = px.line(
-            rank_long,
-            x="Gameweek",
-            y="Rank",
-            color="Manager Name",
-            markers=True,
-            title="GW Rank Progression"
-        )
-        fig_rank.update_traces(connectgaps=False)
-        fig_rank.update_yaxes(autorange="reversed", dtick=1)
-        fig_rank.update_xaxes(tickmode="linear", dtick=1, range=[0, total_gws])  # now includes 0
-        st.plotly_chart(fig_rank, use_container_width=True)
+            fig_rank = px.line(
+                rank_long,
+                x="Gameweek",
+                y="Rank",
+                color="Manager Name",
+                markers=True,
+                title="GW Rank Progression"
+            )
+            fig_rank.update_traces(connectgaps=False)
+            fig_rank.update_yaxes(autorange="reversed", dtick=1)
+            fig_rank.update_xaxes(tickmode="linear", dtick=1, range=[0, total_gws])  # now includes 0
+            st.plotly_chart(fig_rank, use_container_width=True)
 
 
-    # ---- Tab 2: Total Points Rank Progression ----
-    with cumulative_tab:
-        cumulative_points = gw_points_df.copy()
-        cumulative_points[gw_cols] = cumulative_points[gw_cols].cumsum(axis=1, skipna=True)
+        # ---- Tab 2: Total Points Rank Progression ----
+        with cumulative_tab:
+            cumulative_points = gw_points_df.copy()
+            cumulative_points[gw_cols] = cumulative_points[gw_cols].cumsum(axis=1, skipna=True)
 
-        # mask values beyond last valid GW so no forward carry
-        for i, row in gw_points_df.iterrows():
-            last_played = row[gw_cols].last_valid_index()
-            if last_played is not None and pd.notna(row[last_played]):
-                last_gw = int(last_played)
-                for gw in gw_cols:
-                    if gw > last_gw and pd.isna(row[gw]):
-                        cumulative_points.loc[i, gw] = pd.NA
-            else:
-                cumulative_points.loc[i, gw_cols] = pd.NA
+            # mask values beyond last valid GW so no forward carry
+            for i, row in gw_points_df.iterrows():
+                last_played = row[gw_cols].last_valid_index()
+                if last_played is not None and pd.notna(row[last_played]):
+                    last_gw = int(last_played)
+                    for gw in gw_cols:
+                        if gw > last_gw and pd.isna(row[gw]):
+                            cumulative_points.loc[i, gw] = pd.NA
+                else:
+                    cumulative_points.loc[i, gw_cols] = pd.NA
 
-        # add GW0 = 0 points for everyone
-        cumulative_points[0] = 0  
+            # add GW0 = 0 points for everyone
+            cumulative_points[0] = 0  
 
-        cumulative_rank = cumulative_points.copy()
-        for gw in gw_cols:
-            cumulative_rank[gw] = cumulative_points[gw].rank(ascending=False, method='min')
-        cumulative_rank[0] = 8  # GW0 start rank
+            cumulative_rank = cumulative_points.copy()
+            for gw in gw_cols:
+                cumulative_rank[gw] = cumulative_points[gw].rank(ascending=False, method='min')
+            cumulative_rank[0] = 8  # GW0 start rank
 
-        cumulative_long = cumulative_rank.melt(
-            id_vars=["Manager Name"],
-            value_vars=[0] + gw_cols,   # include GW0
-            var_name="Gameweek",
-            value_name="Rank"
-        )
-        cumulative_long["Gameweek"] = cumulative_long["Gameweek"].astype(int)
+            cumulative_long = cumulative_rank.melt(
+                id_vars=["Manager Name"],
+                value_vars=[0] + gw_cols,   # include GW0
+                var_name="Gameweek",
+                value_name="Rank"
+            )
+            cumulative_long["Gameweek"] = cumulative_long["Gameweek"].astype(int)
 
-        fig_cum = px.line(
-            cumulative_long,
-            x="Gameweek",
-            y="Rank",
-            color="Manager Name",
-            markers=True,
-            title="Total Points Rank Progression"
-        )
-        fig_cum.update_traces(connectgaps=False)
-        fig_cum.update_yaxes(autorange="reversed", dtick=1)
-        fig_cum.update_xaxes(tickmode="linear", dtick=1, range=[0, total_gws])  # include 0
-        st.plotly_chart(fig_cum, use_container_width=True)
+            fig_cum = px.line(
+                cumulative_long,
+                x="Gameweek",
+                y="Rank",
+                color="Manager Name",
+                markers=True,
+                title="Total Points Rank Progression"
+            )
+            fig_cum.update_traces(connectgaps=False)
+            fig_cum.update_yaxes(autorange="reversed", dtick=1)
+            fig_cum.update_xaxes(tickmode="linear", dtick=1, range=[0, total_gws])  # include 0
+            st.plotly_chart(fig_cum, use_container_width=True)
 
 
 elif selected == "GW Data":
