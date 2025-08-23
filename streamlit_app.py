@@ -147,11 +147,10 @@ if selected == "Home":
     with header_col2:
         st.title("SLB-FPL Dashboard")
         st.markdown(
-            """
-            Tracking the SLB Mini-League (FPL Elite) for 
-            [Fantasy Premier League](https://fantasy.premierleague.com/leagues/334417/standings/c).
-            """
+            """ Tracking the SLB Mini-League (FPL Elite) for 
+            [Fantasy Premier League](https://fantasy.premierleague.com/leagues/334417/standings/c). """
         )
+
     st.markdown("---")
 
     total_gws = 38
@@ -165,6 +164,20 @@ if selected == "Home":
 
         gw_cols = list(range(1, total_gws + 1))
         gw_points_df[gw_cols] = gw_points_df[gw_cols].apply(pd.to_numeric, errors='coerce')
+
+        # ---- Current GW from API ----
+        r = requests.get("https://fantasy.premierleague.com/api/bootstrap-static/").json()
+        events = r.get("events", [])
+        current_gw = next((e["id"] for e in events if e.get("is_current")), 1)
+
+        # ---- Shared GW Range Slider ----
+        gw_range = st.slider(
+            "Select GW Range",
+            min_value=0,
+            max_value=total_gws,
+            value=(0, current_gw),
+            step=1
+        )
 
         # ---- Tabs ----
         rank_tab, cumulative_tab = st.tabs(["GW Rank Progression", "Total Points Rank Progression"])
@@ -184,15 +197,22 @@ if selected == "Home":
             )
             rank_long["Gameweek"] = rank_long["Gameweek"].astype(int)
 
+            # Apply filter from slider
+            rank_long = rank_long[
+                (rank_long["Gameweek"] >= gw_range[0]) &
+                (rank_long["Gameweek"] <= gw_range[1])
+            ]
+
             fig_rank = px.line(
                 rank_long,
-                x="Gameweek",
-                y="Rank",
-                color="Manager Name",
-                markers=True,
-                title=""
+                x="Gameweek", y="Rank", color="Manager Name",
+                markers=True, title=""
             )
             fig_rank.update_traces(connectgaps=False)
+
+            # Zoom x-axis to slider range
+            fig_rank.update_layout(xaxis=dict(range=[gw_range[0], gw_range[1]]))
+
             make_chart_mobile_friendly(fig_rank, total_gws)
 
         # ---- Tab 2: Total Points Rank Progression ----
@@ -200,7 +220,7 @@ if selected == "Home":
             cumulative_points = gw_points_df.copy()
             cumulative_points[gw_cols] = cumulative_points[gw_cols].cumsum(axis=1, skipna=True)
 
-            # mask values beyond last valid GW so no forward carry
+            # Mask values beyond last valid GW
             for i, row in gw_points_df.iterrows():
                 last_played = row[gw_cols].last_valid_index()
                 if last_played is not None and pd.notna(row[last_played]):
@@ -211,7 +231,7 @@ if selected == "Home":
                 else:
                     cumulative_points.loc[i, gw_cols] = pd.NA
 
-            cumulative_points[0] = 0  # GW0
+            cumulative_points[0] = 0
             cumulative_rank = cumulative_points.copy()
             for gw in gw_cols:
                 cumulative_rank[gw] = cumulative_points[gw].rank(ascending=False, method='min')
@@ -225,19 +245,23 @@ if selected == "Home":
             )
             cumulative_long["Gameweek"] = cumulative_long["Gameweek"].astype(int)
 
+            # Apply filter from slider
+            cumulative_long = cumulative_long[
+                (cumulative_long["Gameweek"] >= gw_range[0]) &
+                (cumulative_long["Gameweek"] <= gw_range[1])
+            ]
+
             fig_cum = px.line(
                 cumulative_long,
-                x="Gameweek",
-                y="Rank",
-                color="Manager Name",
-                markers=True,
-                title=""
+                x="Gameweek", y="Rank", color="Manager Name",
+                markers=True, title=""
             )
             fig_cum.update_traces(connectgaps=False)
-            make_chart_mobile_friendly(fig_cum, total_gws)
 
-    else:
-        st.warning("No GW points data available yet.")
+            # Zoom x-axis to slider range
+            fig_cum.update_layout(xaxis=dict(range=[gw_range[0], gw_range[1]]))
+
+            make_chart_mobile_friendly(fig_cum, total_gws)
 
 
 elif selected == "GW Data":
