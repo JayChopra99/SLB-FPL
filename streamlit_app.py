@@ -45,7 +45,9 @@ def get_all_gw_points(league_id=334417, total_gws=38):
                 'Team Name': team_name,
                 'Manager Name': manager_name,
                 'GW': gw['event'],
-                'GW Points': gw['points']
+                'GW Points (Raw)': gw['points'],
+                'Transfer Cost': gw['event_transfers_cost'],
+                'GW Points': gw['points'] - gw['event_transfers_cost']  # adjusted
             })
 
     if all_data:
